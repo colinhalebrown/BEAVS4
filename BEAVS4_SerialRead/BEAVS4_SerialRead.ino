@@ -119,7 +119,8 @@ void setup() {
 
     file = SD.open("BEAVS4_data.csv", FILE_WRITE);
     if (file) {
-      file.println("Pressure (hPa),Temperature (*C),Altimeter (m)");
+      //file.println("Pressure (hPa),Temperature (*C),Altimeter (m)");
+      file.println("Serial Data");
       file.close();
     } else {
       Serial.println("Writing Header Failed");
@@ -146,15 +147,18 @@ void loop() {
   
   if (Serial.available() > 0) {
     SerialData = Serial.read();
-    
   }
   
+  /*
   // Data Packing
   String temperatureData = (String)temperature;
   String pressureData = (String)pressure;
   String altimeterData = (String)altimeter;
   dataString = pressureData + cell + temperatureData + cell + altimeterData;
   Serial.println(dataString);
+  */
+
+  String dataString = (String)SerialData;
 
   // Data Logging
   file = SD.open("BEAVS4_data.csv", FILE_WRITE);
