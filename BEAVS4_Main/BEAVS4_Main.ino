@@ -189,3 +189,39 @@ void servo(int x) {
     // Pulses duration: 500 - 0deg; 1500 - 90deg; 2500 - 180deg
   }
 }
+
+void measure() {
+  // BMP390 Data Collection
+  if (! bmp.performReading()) {
+    Serial.println("Failed to perform reading whomp whomp");
+    return;
+  } else {
+    temperature = bmp.temperature;
+    pressure = bmp.pressure / 100.0;
+    altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
+  }
+}
+
+void SDlog(){
+// Data Packing
+  String temperatureData = (String)temperature;
+  String pressureData = (String)pressure;
+  String altimeterData = (String)altimeter;
+  dataString = pressureData + cell + temperatureData + cell + altimeterData;
+  Serial.println(dataString);
+
+  // Data Logging
+  file = SD.open("BEAVS4_data.csv", FILE_WRITE);
+  if (file) {
+    file.println(dataString); //print data to file
+    file.close();
+    Serial.println("Data Recorded");
+  } else {
+    Serial.println("Data Failed to record");
+  }
+}
+
+void PID() {
+
+}
+
