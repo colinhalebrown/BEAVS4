@@ -58,6 +58,8 @@ float pressure;
 float temperature;
 float altimeter;
 
+float SerialData[4];
+
 /* -------------------- CORE 0 -------------------- */
 
 void setup() {
@@ -146,7 +148,9 @@ void loop() {
   while(intupSW == HIGH);
   
   if (Serial.available() > 0) {
-    SerialData = Serial.read();
+    for (int i=0; i<3; i++) {
+      SerialData[i] = Serial.parseFloat();
+    }
   }
   
   /*
@@ -158,22 +162,23 @@ void loop() {
   Serial.println(dataString);
   */
 
-  String dataString = (String)SerialData;
+  for (int i=0; i<) {
+    sprintf(dataString,);
+    String dataString = (String)SerialData;
+  }
 
   // Data Logging
   file = SD.open("BEAVS4_data.csv", FILE_WRITE);
   if (file) {
     file.println(dataString); //print data to file
     file.close();
-    Serial.println("Data Recorded");
+    //Serial.println("Data Recorded");
   } else {
-    Serial.println("Data Failed to record");
+    //Serial.println("Data Failed to record");
   }
 
   // Print Data to Serial Monitor
-
-
-  delay(500);
+  delay(10);
 }
 
 /* -------------------- FUNCTIONS -------------------- */
@@ -201,11 +206,6 @@ void measure() {
     altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
   }
   */
-  
-  if (Serial.available() > 0) {
-    uint8_t buf = Serial.read();
-    Serial.println(buf);
-  }
 }
 
 void SDlog(){
@@ -227,19 +227,30 @@ void SDlog(){
   }
 }
 
+/*
 double PID(time, Kp, Ki, Kd, u, V, Vtarg) {
+  double time = time;
+  double Kp = Kp;
+  double Ki = Ki;
+  double Kd = Kd;
+  double u = u;
+  double V = V;
+  double Vtarg = Vtarg;
+
   // find time difference
   double dt = time[1] - time[0];
 
   // find error
-  double err = Vtarg - V; // would be usefull to save this value
+  double err = Vtarg - V; // would be useful to save this value
 
   // update control function
-  double u = u + (Kp+Ki*dt+Kd/dt)*err[2] + abs((-Kp-2*Kd/dt)*err[1]) + (Kd/dt)*err[0];
+  u = u + (Kp+Ki*dt+Kd/dt)*err[2] + abs((-Kp-2*Kd/dt)*err[1]) + (Kd/dt)*err[0];
   return u;
 }
 
 double VelLookUp(H) {
+  double H = H;
+  
   // define polynomial
   // polynomial fit found via MATLAB
   float p1 = -2.197790209276072e-9;
@@ -252,3 +263,4 @@ double VelLookUp(H) {
 
   return V;
 }
+*/
