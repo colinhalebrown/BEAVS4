@@ -25,18 +25,19 @@ const int _SCK = 10;
 /* -------------------- DEFINE HARDWARE ---------------- */
 
 // Define Active Hardware
-const int interupt_SW = 27;
-const int interupt_LED = 26;
-const int IO1_LED = 21;
-const int IO2_LED = 20;
-const int IO3_LED = 19;
+const int interupt_SW = 26;
+//const int interupt_LED = 26;
+//const int IO1_LED = 21;
+//const int IO2_LED = 20;
+//const int IO3_LED = 19;
 const int servoPin = 28;
-
-// Define Active Variables
-int intupSW = 0;
-//#define servoPin 28
+const int servoPower = 4;
 
 /* -------------------- GLOBAL VARS -------------------- */
+
+// Define Active Variables
+int intupSW = 0; // interupt state
+uint16_t SAMPLERATE_DELAY = 100; // time in ms
 
 // Initialize SD card 
 File file;
@@ -62,12 +63,13 @@ float altimeter;
 
 void setup() {
   // Define Inputs and outputs
+  pinMode(servoPower, OUTPUT); // Servo power control pin
   pinMode(servoPin, OUTPUT); // Servo is a digital output
   pinMode(interupt_SW, INPUT); // Interupt switch input
-  pinMode(interupt_LED, OUTPUT); // Interupt LED output
-  pinMode(IO1_LED, OUTPUT); // Input-Output 1 Indicator output
-  pinMode(IO2_LED, OUTPUT); // Input-Output 2 Indicator output
-  pinMode(IO3_LED, OUTPUT); // Input-Output 3 Indicator output
+  //pinMode(interupt_LED, OUTPUT); // Interupt LED output
+  //pinMode(IO1_LED, OUTPUT); // Input-Output 1 Indicator output
+  //pinMode(IO2_LED, OUTPUT); // Input-Output 2 Indicator output
+  //pinMode(IO3_LED, OUTPUT); // Input-Output 3 Indicator output
 
   Serial.begin(115200);
   while (!Serial);
@@ -90,7 +92,6 @@ void setup() {
     bmp.setOutputDataRate(BMP3_ODR_50_HZ);
   }
   
-
   // BNO055 Check
   Serial.print("  BNO055 Status: ");
   if (!bno.begin()){
@@ -138,8 +139,10 @@ void setup() {
 
   Serial.println("    ---------------");
   delay(1000);
+
 }
 
+// DATA LOOP
 void loop() {
 
   while(intupSW == HIGH);
@@ -177,6 +180,18 @@ void loop() {
   delay(500);
 }
 
+/* -------------------- CORE 1 -------------------- */
+
+void setup1() {
+
+}
+
+// CONTROL LOOP
+void loop1() {
+
+
+}
+
 /* -------------------- FUNCTIONS -------------------- */
 
 void servo(int x) {
@@ -200,6 +215,7 @@ void measure() {
     pressure = bmp.pressure / 100.0;
     altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
   }
+  
 }
 
 void SDlog(){

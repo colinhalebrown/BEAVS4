@@ -1,6 +1,7 @@
-#define servoPin 28
+const int servoPin = 27;
+const int servoPower = 28;
 
-const int interupt_SW = 27;
+const int interupt_SW = 26;
 
 int m = (1770-670)/2 + 670;
 int d = 550;
@@ -8,6 +9,7 @@ int x;
 
 void setup() {
   Serial.begin(9600);
+  pinMode(servoPower, OUTPUT);
   pinMode(servoPin, OUTPUT);
   servo(1850);
   delay(500);
@@ -16,6 +18,8 @@ void setup() {
 
   pinMode(interupt_SW, INPUT); // Interupt switch input
   delay(8000);
+
+  digitalWrite(servoPower, HIGH);
 
   Serial.println("Ready");
   while(digitalRead(interupt_SW) == HIGH);
