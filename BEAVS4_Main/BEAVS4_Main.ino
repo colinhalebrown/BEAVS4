@@ -59,6 +59,25 @@ float pressure;
 float temperature;
 float altimeter;
 
+/* ------------------- PID VARS ------------------- */
+float H = 0; // height in meters
+float V = 0; // velocity in m/s
+float Vtarg = 0; // target velocty, m/s
+int dt = 0;
+long timePrev = 0;
+long timeNow = 0;
+float u = 0;
+
+// PID constants
+float Kp = 1;
+float Ki = 1;
+float Kd = 1;
+
+// error
+float err1 = 0;
+float err2 = 0;
+float err3 = 0;
+
 /* -------------------- CORE 0 -------------------- */
 
 void setup() {
@@ -139,7 +158,6 @@ void setup() {
 
   Serial.println("    ---------------");
   delay(1000);
-
 }
 
 // DATA LOOP
@@ -184,6 +202,7 @@ void loop() {
 
 void setup1() {
 
+
 }
 
 // CONTROL LOOP
@@ -215,7 +234,7 @@ void measure() {
     pressure = bmp.pressure / 100.0;
     altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
   }
-  
+
 }
 
 void SDlog(){
@@ -238,6 +257,36 @@ void SDlog(){
 }
 
 void PID() {
+  // calculate change in time
+  timeNow = millis();
+  int dt = timeNow - timePrev; // in milliseconds
 
+  // update target velocity
+  VelLookup();
+
+  // calculate error
+  float err3 = err2; // prev prev error
+  float err2 = err1; // prev error
+  float err1 = Vtarg - V; // current error
+
+  // update control function
+  float u = u + (Kp+Ki*dt+Kd/dt)*err3 + abs((-Kp-2*Kd/dt)*err2) + (Kd/dt)*err1;
+
+  // set prev time to curret time
+  timePrev = timeNow;
 }
 
+void VelLookup() {
+  float H = H;
+  
+  // define polynomial
+  // polynomial fit found via MATLAB
+  float p1 = -2.197790209276072e-9;
+  float p2 =  1.424454885385808e-6;
+  float p3 = -2.425899535946396e-4;
+  float p4 = -0.031992842779187;
+  float p5 = -0.261849939656465;
+
+  // set target velocity
+  float Vtarg = p1*pow(H,4) + p2*pow(H,3) + p3*pow(H,2) + p4*(H) + p5;
+}
