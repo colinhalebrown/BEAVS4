@@ -3,7 +3,7 @@ BEAVS4 Code
 
 This code is responsible for collecting and acting on live data to air brake durring the flight of a rocket. 
 
-By: Colin Hale-Brown
+By: Colin Hale-Brown 
 */
 
 /* --------------- CONFIG & INCLUDED LIBRARIES --------- */
@@ -16,6 +16,7 @@ const int _SCK = 10;
 
 // Libraries to include
 #include <SPI.h>
+#include <Wire.h>
 #include <SD.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BMP3XX.h"
@@ -26,23 +27,8 @@ const int _SCK = 10;
 
 // Define Active Hardware
 const int interupt_SW = 26;
-//const int interupt_LED = 26;
-//const int IO1_LED = 21;
-//const int IO2_LED = 20;
-//const int IO3_LED = 19;
 const int servoPin = 28;
 const int servoPower = 4;
-
-/* -------------------- GLOBAL VARS -------------------- */
-
-// Define Active Variables
-int intupSW = 0; // interupt state
-uint16_t SAMPLERATE_DELAY = 100; // time in ms
-
-// Initialize SD card 
-File file;
-String cell = ",";
-String dataString;
 
 // Initialize I2C
 #define WIRE Wire
@@ -54,14 +40,35 @@ String dataString;
 Adafruit_BMP3XX bmp;
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire);
 
-// Initialize Variables
-float pressure;
-float temperature;
-float altimeter;
+/* ------------------- DATA VARS ------------------ */
+
+// Initialize SD card 
+File file;
+String cell = ",";
+String dataString;
+
+// BMP390 Variables
+float pressure = 0;
+float temperature = 0;
+float altimeter = 0;
+
+// BNO055 Variables
+float xAccel = -100000;
+float yAccel = -100000;
+float zAccel = -100000;
+
+// Calculated Variables
+float velocity = 0;
+float velTimeNow = 0;
+float velTimePrev = 0;
+float altPrev = 0;
+
+/* ------------------- INTERRUPT VARS ------------- */
+int intupSW = 0; // interupt state
 
 /* ------------------- PID VARS ------------------- */
-float H = 0; // height in meters
-float V = 0; // velocity in m/s
+float H = 0; // height in meters // CORE 0 FUNCTION!!!!!!!!!
+float V = 0; // velocity in m/s  // CORE 0 FUNCTION!!!!!!!!!
 float Vtarg = 0; // target velocty, m/s
 int dt = 0;
 long timePrev = 0;
@@ -85,25 +92,17 @@ void setup() {
   pinMode(servoPower, OUTPUT); // Servo power control pin
   pinMode(servoPin, OUTPUT); // Servo is a digital output
   pinMode(interupt_SW, INPUT); // Interupt switch input
-  //pinMode(interupt_LED, OUTPUT); // Interupt LED output
-  //pinMode(IO1_LED, OUTPUT); // Input-Output 1 Indicator output
-  //pinMode(IO2_LED, OUTPUT); // Input-Output 2 Indicator output
-  //pinMode(IO3_LED, OUTPUT); // Input-Output 3 Indicator output
+  pinMode(LED_BUILTIN, OUTPUT); // Pico LED
 
-  Serial.begin(115200);
-  while (!Serial);
-
-  delay(1000);
-  Serial.println("    [ BEAVS Setup ]");
+  // Data Startup
+  digitalWrite(LED_BUILTIN, LOW); // Turn off LED at start
 
   // BMP390 check
-  Serial.print("  BMP390 Status: ");
   if (!bmp.begin_I2C()) {
-    Serial.println("Connection Failed");
+    digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     while (1);
 
   } else {
-    Serial.println("Connected");
     // Set up BMP390 oversampling and filter initialization
     bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
     bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
@@ -112,14 +111,11 @@ void setup() {
   }
   
   // BNO055 Check
-  Serial.print("  BNO055 Status: ");
   if (!bno.begin()){
     /* There was a problem detecting the BNO055 ... check your connections */
-    Serial.println("Connection Failed");
+    digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     while (1);
 
-  } else {
-    Serial.println("Connected");
   }
 
   // SD Card Check
@@ -129,79 +125,43 @@ void setup() {
   bool sdInitialized = false;
   sdInitialized = SD.begin(_CS, SPI1);
 
-  Serial.print("      SD Status: ");
   if (!sdInitialized) {
-    Serial.println("Connection Failed");
+    digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     while (1);
 
   } else {
-    Serial.println("Connected");
-
     file = SD.open("BEAVS4_data.csv", FILE_WRITE);
     if (file) {
-      file.println("Pressure (hPa),Temperature (*C),Altimeter (m)");
+      file.println("Time (ms),Pressure (hPa),Temperature (*C),Altimeter (m),Velocity (m/s),X Acceleration (m/s^2),Y Acceleration (m/s^2),Z Acceleration (m/s^2),Error,U");
       file.close();
     } else {
-      Serial.println("Writing Header Failed");
+      digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     }
   }
-
-  // Physical Interupt Check
-  intupSW = digitalRead(interupt_SW);
-
-  Serial.print("Interupt Status: ");
-  if (intupSW == HIGH) {
-    Serial.println("System Interupted");
-  } else {
-    Serial.println("No Interupt ");
-  }
-
-  Serial.println("    ---------------");
-  delay(1000);
 }
 
 // DATA LOOP
 void loop() {
 
-  while(intupSW == HIGH);
-  
-  // BMP390 Data Collection
-  if (! bmp.performReading()) {
-    Serial.println("Failed to perform reading whomp whomp");
-    return;
-  } else {
-    temperature = bmp.temperature;
-    pressure = bmp.pressure / 100.0;
-    altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
-  }
+  measure();
+  calculate();
+  SDlog();
 
-  // Data Packing
-  String temperatureData = (String)temperature;
-  String pressureData = (String)pressure;
-  String altimeterData = (String)altimeter;
-  dataString = pressureData + cell + temperatureData + cell + altimeterData;
-  Serial.println(dataString);
-
-  // Data Logging
-  file = SD.open("BEAVS4_data.csv", FILE_WRITE);
-  if (file) {
-    file.println(dataString); //print data to file
-    file.close();
-    Serial.println("Data Recorded");
-  } else {
-    Serial.println("Data Failed to record");
-  }
-
-  // Print Data to Serial Monitor
-
-
-  delay(500);
 }
 
 /* -------------------- CORE 1 -------------------- */
 
 void setup1() {
 
+
+  // Physical Interupt Check
+  intupSW = digitalRead(interupt_SW);
+
+  if (intupSW == HIGH) {
+    //Serial.println("System Interupted");
+  } else {
+    //Serial.println("No Interupt ");
+  }
 
 }
 
@@ -227,7 +187,7 @@ void servo(int x) {
 void measure() {
   // BMP390 Data Collection
   if (! bmp.performReading()) {
-    Serial.println("Failed to perform reading whomp whomp");
+    digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     return;
   } else {
     temperature = bmp.temperature;
@@ -235,14 +195,50 @@ void measure() {
     altimeter = bmp.readAltitude(SEALEVELPRESSURE_HPA);
   }
 
+  // Get BNO055 Data
+  sensors_event_t accelerometerData;
+  bno.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  sensors_event_t* event = &accelerometerData;
+  event->type == SENSOR_TYPE_ACCELEROMETER;
+  // Update BNO055 Data
+  xAccel = event->acceleration.x;
+  yAccel = event->acceleration.y;
+  zAccel = event->acceleration.z;
+
+}
+
+void calculate() {
+  velTimeNow = millis();
+
+  velocity = (altimeter - altPrev) / (velTimeNow - velTimePrev);
+
+  velTimePrev = velTimeNow;
+  altPrev = altimeter;
 }
 
 void SDlog(){
 // Data Packing
-  String temperatureData = (String)temperature;
+  String timeData = (String)millis();
   String pressureData = (String)pressure;
+  String temperatureData = (String)temperature;
   String altimeterData = (String)altimeter;
-  dataString = pressureData + cell + temperatureData + cell + altimeterData;
+  String velocityData = (String)velocity;
+  String xAccelData = (String)xAccel;
+  String yAccelData = (String)yAccel;
+  String zAccelData = (String)zAccel;
+  String errorData = (String)err1;
+  String uData = (String)u;
+
+  dataString = timeData + cell
+            + pressureData + cell 
+            + temperatureData + cell 
+            + altimeterData + cell
+            + velocityData + cell
+            + xAccelData + cell
+            + yAccelData + cell
+            + zAccelData + cell
+            + errorData + cell
+            + uData;
   Serial.println(dataString);
 
   // Data Logging
@@ -250,9 +246,8 @@ void SDlog(){
   if (file) {
     file.println(dataString); //print data to file
     file.close();
-    Serial.println("Data Recorded");
   } else {
-    Serial.println("Data Failed to record");
+    digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
   }
 }
 
@@ -270,7 +265,7 @@ void PID() {
   float err1 = Vtarg - V; // current error
 
   // update control function
-  float u = u + (Kp+Ki*dt+Kd/dt)*err3 + abs((-Kp-2*Kd/dt)*err2) + (Kd/dt)*err1;
+  float u = u + (Kp+Ki*dt+Kd/dt)*err1 + abs((-Kp-2*Kd/dt)*err2) + (Kd/dt)*err3;
 
   // set prev time to curret time
   timePrev = timeNow;

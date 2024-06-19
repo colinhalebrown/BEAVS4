@@ -3,7 +3,8 @@ BEAVS4 Code
 
 This code is responsible for collecting and acting on live data to air brake durring the flight of a rocket. 
 
-By: Colin Hale-Brown
+By: Colin Hale-Brown & Dexter Carpenter
+
 */
 
 /* --------------- CONFIG & INCLUDED LIBRARIES --------- */
