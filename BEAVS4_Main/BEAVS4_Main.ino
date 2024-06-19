@@ -3,7 +3,7 @@ BEAVS4 Code
 
 This code is responsible for collecting and acting on live data to air brake durring the flight of a rocket. 
 
-By: Colin Hale-Brown 
+By: Colin Hale-Brown & Dexter Capenter
 */
 
 /* --------------- CONFIG & INCLUDED LIBRARIES --------- */
@@ -26,7 +26,7 @@ const int _SCK = 10;
 /* -------------------- DEFINE HARDWARE ---------------- */
 
 // Define Active Hardware
-const int interupt_SW = 26;
+const int interrupt_SW = 26;
 const int servoPin = 28;
 const int servoPower = 4;
 
@@ -63,8 +63,23 @@ float velTimeNow = 0;
 float velTimePrev = 0;
 float altPrev = 0;
 
-/* ------------------- INTERRUPT VARS ------------- */
-int intupSW = 0; // interupt state
+/* ------------------- CONTROL VARS --------------- */
+float groundLevel = 1208;
+float altAGL = 0; // Altitude Above Ground Level
+int check = 120; //time between checks in ms
+
+bool flightPhase = false; // latch for rocket flight
+bool motorCut = false; // latch for motor cutoff
+bool coastPhase = false; // latch for the coast phase
+bool apogee = false; // latch for recover
+
+float altTrigger = 150; // trigger altitude 
+float dh = 0; // change in altitude
+int c = 0; // counter for agogee trigger
+
+// Hysteresis variables
+int prevX1 = 0;
+int prevX2 = 0;
 
 /* ------------------- PID VARS ------------------- */
 float H = 0; // height in meters // CORE 0 FUNCTION!!!!!!!!!
@@ -91,7 +106,7 @@ void setup() {
   // Define Inputs and outputs
   pinMode(servoPower, OUTPUT); // Servo power control pin
   pinMode(servoPin, OUTPUT); // Servo is a digital output
-  pinMode(interupt_SW, INPUT); // Interupt switch input
+  pinMode(interrupt_SW, INPUT); // Interupt switch input
   pinMode(LED_BUILTIN, OUTPUT); // Pico LED
 
   // Data Startup
@@ -153,27 +168,83 @@ void loop() {
 
 void setup1() {
 
-
-  // Physical Interupt Check
-  intupSW = digitalRead(interupt_SW);
-
-  if (intupSW == HIGH) {
-    //Serial.println("System Interupted");
-  } else {
-    //Serial.println("No Interupt ");
-  }
-
 }
 
 // CONTROL LOOP
 void loop1() {
+  // physical interrupt hold trigger
+  while(interrupt_SW == HIGH); // can activate any time to scrub
+
+  // polling coast phase interrupt
+  while(coastPhase == false){
+    altAGL = altimeter - groundLevel;
+    int i = 0;
+
+    // latch for rocket flight
+    if (altAGL > altTrigger){
+      flightPhase = true;
+    }
+
+    // latch for motor cutoff
+    if (zAccel >= 0 && flightPhase == true){
+      i = i + 1;
+      delay(check);
+    } else {
+      i = 0;
+    }
+    if (i >= 5){
+      motorCut = true;
+    }
+
+    // latch for coast phase
+    if (flightPhase == true && motorCut == true){
+      coastPhase = true;
+    }
+  }
+
+  // PID control
+  if (coastPhase == true){
+    PID();
+  }
+
+  // Apogee latch trigger
+  dh = altimeter - altPrev;
+  if (dh >= 0){
+    c = c + 1;
+    if (c >= 6){
+      apogee = true;
+    }
+  } else {
+    c = 0;
+  }
 
 
+  // retract blades after apogee
+  while(apogee == true){
+    servo(0);
+    delay(1000);
+  }
 }
 
 /* -------------------- FUNCTIONS -------------------- */
 
-void servo(int x) {
+void servo(int d) {
+  // 500 load - 670 full extention - 1770 default - 1850 stowed
+  int max = 1770;
+  int min = 670;
+  int extendH = 5;
+  int retractH = 5;
+  int extention = 60;
+
+  int x = -((max - min) / extention) * d + max;
+  int dx = prevX1 - prevX2;
+
+  if (x > prevX1 && dx < 0){
+    x = x + extendH;
+  } else if (x < prevX1 && dx > 0){
+    x = x - retractH;
+  }
+
   for (int i = 0; i <= 2; i++) {
     // A pulse each 20ms
     digitalWrite(servoPin, HIGH);

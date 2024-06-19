@@ -1,7 +1,7 @@
 #define servoPin 28
 
-// 500 load - 670 full extention - 1770 default - 1850 stowed
-//int d = 0;      // Desired Value
+int prevX1 = 0;
+int prevX2 = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -12,15 +12,32 @@ void loop() {
   while (Serial.available() == 0) {
   }
 
-  int menuChoice = Serial.parseInt();
+  int u = Serial.parseInt();
 
-  Serial.println(menuChoice);
+  Serial.print("Motor Signal: ");
+  Serial.println(u);
 
-  servo(menuChoice);
-  delay(600);
+  servo(u);
+  delay(200);
 }
 
-void servo(int x) {
+void servo(int d){
+  // 500 load - 670 full extention - 1770 default - 1850 stowed
+  int max = 1770;
+  int min = 670;
+  int extendH = 5;
+  int retractH = 5;
+  int extention = 60;
+
+  int x = -((max - min) / extention) * d + max;
+  int dx = prevX1 - prevX2;
+
+  if (x > prevX1 && dx < 0){
+    x = x + extendH;
+  } else if (x < prevX1 && dx > 0){
+    x = x - retractH;
+  }
+
   for (int i = 0; i <= 2; i++) {
     // A pulse each 20ms
     digitalWrite(servoPin, HIGH);
