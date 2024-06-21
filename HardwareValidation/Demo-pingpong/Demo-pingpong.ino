@@ -1,51 +1,18 @@
 const int servoPin = 27;
 const int servoPower = 28;
 
-const int interupt_SW = 26;
-
-int m = (1770-670)/2 + 670;
-int d = 550;
-int x;
-
 void setup() {
   Serial.begin(9600);
   pinMode(servoPower, OUTPUT);
   pinMode(servoPin, OUTPUT);
-  servo(1850);
-  delay(500);
-  servo(1850);
-  delay(500);
-
-  pinMode(interupt_SW, INPUT); // Interupt switch input
-  delay(8000);
 
   digitalWrite(servoPower, HIGH);
-
-  Serial.println("Ready");
-  while(digitalRead(interupt_SW) == HIGH);
-  Serial.println("Interupt Passed");
-
-  // Setup Motor
-  servo(1770);
-  Serial.println("Flush");
-  delay(1000);
-  servo(670);
-  Serial.println("Extend");
-  delay(1000);
-  servo(1770);
-  Serial.println("Flush");
-  delay(10000);
 
 }
 
 void loop() {
-   d = d*-1;
-   x = m + d;
-   //x = 0;
-   
-   servo(x);
-   Serial.println(x);
-   delay(525);
+  servo(1860);
+  delay(1000);
 }
 
 void servo(int x) {
@@ -54,7 +21,6 @@ void servo(int x) {
     digitalWrite(servoPin, HIGH);
     delayMicroseconds(x); // Duration of the pusle in microseconds
     digitalWrite(servoPin, LOW);
-    delayMicroseconds(18550); // 20ms - duration of the pusle
-    // Pulses duration: 500 - 0deg; 1500 - 90deg; 2500 - 180deg
+    delayMicroseconds(18550); // 20ms - duration of the pusle  
   }
 }

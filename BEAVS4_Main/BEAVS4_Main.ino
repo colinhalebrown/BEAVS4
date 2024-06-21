@@ -27,8 +27,8 @@ const int _SCK = 10;
 
 // Define Active Hardware
 const int interrupt_SW = 26;
-const int servoPin = 28;
-const int servoPower = 4;
+const int servoPin = 27;
+const int servoPower = 28;
 
 // Initialize I2C
 #define WIRE Wire
@@ -64,7 +64,7 @@ float velTimePrev = 0;
 float altPrev = 0;
 
 /* ------------------- CONTROL VARS --------------- */
-float groundLevel = 1208;
+float groundLevel = 0;
 float altAGL = 0; // Altitude Above Ground Level
 int check = 120; //time between checks in ms
 
@@ -73,13 +73,10 @@ bool motorCut = false; // latch for motor cutoff
 bool coastPhase = false; // latch for the coast phase
 bool apogee = false; // latch for recover
 
-float altTrigger = 150; // trigger altitude 
-float dh = 0; // change in altitude
-int c = 0; // counter for agogee trigger
+float altTrigger = 150; // trigger altitude 150m ~ 500ft
+long CoastStart = 0;
+long RetractDelay = 40000;
 
-// Hysteresis variables
-int prevX1 = 0;
-int prevX2 = 0;
 
 /* ------------------- PID VARS ------------------- */
 float H = 0; // height in meters // CORE 0 FUNCTION!!!!!!!!!
@@ -91,9 +88,9 @@ long timeNow = 0;
 float u = 0;
 
 // PID constants
-float Kp = 1;
-float Ki = 1;
-float Kd = 1;
+float Kp = 0.200e-04;
+float Ki = 1.250e-09;
+float Kd = 7.500e-05;
 
 // error
 float err1 = 0;
@@ -104,9 +101,6 @@ float err3 = 0;
 
 void setup() {
   // Define Inputs and outputs
-  pinMode(servoPower, OUTPUT); // Servo power control pin
-  pinMode(servoPin, OUTPUT); // Servo is a digital output
-  pinMode(interrupt_SW, INPUT); // Interupt switch input
   pinMode(LED_BUILTIN, OUTPUT); // Pico LED
 
   // Data Startup
@@ -147,12 +141,17 @@ void setup() {
   } else {
     file = SD.open("BEAVS4_data.csv", FILE_WRITE);
     if (file) {
-      file.println("Time (ms),Pressure (hPa),Temperature (*C),Altimeter (m),Velocity (m/s),X Acceleration (m/s^2),Y Acceleration (m/s^2),Z Acceleration (m/s^2),Error,U");
+      file.println("Time (ms),Pressure (hPa),Temperature (*C),Altimeter (m),Velocity (m/s),Altimeter AGL (m),X Acceleration (m/s^2),Y Acceleration (m/s^2),Z Acceleration (m/s^2),Error,U");
       file.close();
     } else {
       digitalWrite(LED_BUILTIN, HIGH); // Indicate System Check Failed
     }
   }
+
+  delay(180000);
+
+  while(digitalRead(interrupt_SW) == HIGH); // can activate any time to scrub
+
 }
 
 // DATA LOOP
@@ -168,17 +167,39 @@ void loop() {
 
 void setup1() {
 
+  pinMode(servoPower, OUTPUT); // Servo power control pin
+  pinMode(servoPin, OUTPUT); // Servo is a digital output
+  pinMode(interrupt_SW, INPUT); // Interupt switch input
+
+  delay(180000);
+
+  while(digitalRead(interrupt_SW) == HIGH); // can activate any time to scrub
+
+  digitalWrite(servoPower, HIGH); // Power servo
+
+  servo(0);
+  delay(500);
+  servo(60);
+  delay(500);
+  servo(30);
+  delay(500);
+  servo(60);
+  delay(500);
+  servo(30);
+  delay(500);
+  servo(0);
+
+  // wait for sensors to calibrate and initialize
+  delay(30000);
+  groundLevel = altimeter; // Set AGL
 }
 
 // CONTROL LOOP
 void loop1() {
-  // physical interrupt hold trigger
-  while(interrupt_SW == HIGH); // can activate any time to scrub
 
   // polling coast phase interrupt
   while(coastPhase == false){
-    altAGL = altimeter - groundLevel;
-    int i = 0;
+    int i;
 
     // latch for rocket flight
     if (altAGL > altTrigger){
@@ -187,7 +208,7 @@ void loop1() {
 
     // latch for motor cutoff
     if (zAccel >= 0 && flightPhase == true){
-      i = i + 1;
+      i++;
       delay(check);
     } else {
       i = 0;
@@ -199,25 +220,23 @@ void loop1() {
     // latch for coast phase
     if (flightPhase == true && motorCut == true){
       coastPhase = true;
+      CoastStart = millis();
+      digitalWrite(servoPower, HIGH); // Power servo
     }
   }
 
   // PID control
   if (coastPhase == true){
     PID();
+    servo(u);
+
   }
 
   // Apogee latch trigger
-  dh = altimeter - altPrev;
-  if (dh >= 0){
-    c = c + 1;
-    if (c >= 6){
-      apogee = true;
-    }
-  } else {
-    c = 0;
-  }
 
+  if ((millis() - CoastStart >= RetractDelay) && (coastPhase == true)){
+    apogee = true;
+  }
 
   // retract blades after apogee
   while(apogee == true){
@@ -229,21 +248,16 @@ void loop1() {
 /* -------------------- FUNCTIONS -------------------- */
 
 void servo(int d) {
-  // 500 load - 670 full extention - 1770 default - 1850 stowed
-  int max = 1770;
-  int min = 670;
-  int extendH = 5;
-  int retractH = 5;
-  int extention = 60;
+  int max = 1860;
+  int min = 770;
+  int maxExtention = 60;
 
-  int x = -((max - min) / extention) * d + max;
-  int dx = prevX1 - prevX2;
-
-  if (x > prevX1 && dx < 0){
-    x = x + extendH;
-  } else if (x < prevX1 && dx > 0){
-    x = x - retractH;
+  if (d > 60){
+    d = 60;
+  } else if (d < 0){
+    d = 0;
   }
+  int x = -((max - min) / maxExtention) * d + max;
 
   for (int i = 0; i <= 2; i++) {
     // A pulse each 20ms
@@ -279,12 +293,16 @@ void measure() {
 }
 
 void calculate() {
+  // Calculate Velocity
   velTimeNow = millis();
 
   velocity = (altimeter - altPrev) / (velTimeNow - velTimePrev);
 
   velTimePrev = velTimeNow;
   altPrev = altimeter;
+
+  // Calculate AGL
+  altAGL = altimeter - groundLevel;
 }
 
 void SDlog(){
@@ -294,6 +312,7 @@ void SDlog(){
   String temperatureData = (String)temperature;
   String altimeterData = (String)altimeter;
   String velocityData = (String)velocity;
+  String altAGLData = (String)altAGL;
   String xAccelData = (String)xAccel;
   String yAccelData = (String)yAccel;
   String zAccelData = (String)zAccel;
@@ -305,12 +324,13 @@ void SDlog(){
             + temperatureData + cell 
             + altimeterData + cell
             + velocityData + cell
+            + altAGLData + cell
             + xAccelData + cell
             + yAccelData + cell
             + zAccelData + cell
             + errorData + cell
             + uData;
-  Serial.println(dataString);
+  //Serial.println(dataString);
 
   // Data Logging
   file = SD.open("BEAVS4_data.csv", FILE_WRITE);
@@ -343,8 +363,6 @@ void PID() {
 }
 
 void VelLookup() {
-  float H = H;
-  
   // define polynomial
   // polynomial fit found via MATLAB
   float p1 = -2.197790209276072e-9;
